@@ -1,10 +1,13 @@
 package com.redis.redis.sixtwo;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Resource;
 
@@ -35,19 +38,42 @@ class RedisSetTest {
   private SetOperations<String, String> setOps;
 
   // - Add SMISMEMBER command that checks multiple members (#7615)
+  
+  @Test
+  void testSimpleExample() {
+    // redis> SADD colors red yellow green fushia
+    // redis> SADD colors yellow
+    // redis> SMEMBERS colors
+    // redis> SISMEMBER colors green
+    // redis> SISMEMBER colors magenta
+    // redis> SREM colors green
+    // redis> SREM colors green
+    // redis> SMEMBERS colors
+    
+    setOps.add("colors", "red", "yellow", "green", "fushia");
+    setOps.add("colors", "yellow");
+    Set<String> members = setOps.members("colors");
+    assertTrue(members.containsAll(List.of("red", "yellow", "green", "fushia")));
+    assertTrue(setOps.isMember("colors", "green"));
+    assertFalse(setOps.isMember("colors", "magenta"));
+    assertEquals(1, setOps.remove("colors", "green"));
+    members = setOps.members("colors");
+    assertTrue(members.containsAll(List.of("red", "yellow", "fushia")));
+  }
 
   @Test
   void testSMISMEMBER() {
-    // redis> SADD myset "one"
-    // redis> SADD myset "one"
-    // redis> SMISMEMBER myset "one" "notamember"
+    // redis> SADD colors red yellow green fushia
+    // redis> SMISMEMBER colors red black green
     // 1) (integer) 1
     // 2) (integer) 0
-    setOps.add("myset", "one");
-    setOps.add("myset", "one");
-    Map<Object, Boolean> memberCheck = setOps.isMember("myset", "one", "notamember");
-    assertTrue(memberCheck.get("one"));
-    assertFalse(memberCheck.get("notamember"));
+    // 3) (integer) 1
+    
+    setOps.add("colors", "red", "yellow", "green", "fushia");
+    Map<Object, Boolean> memberCheck = setOps.isMember("colors", "red", "black", "green");
+    assertTrue(memberCheck.get("red"));
+    assertFalse(memberCheck.get("black"));
+    assertTrue(memberCheck.get("green"));
   }
 
   @SpringBootApplication
