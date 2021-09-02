@@ -2,10 +2,12 @@ package com.redis.redis.sixtwo;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.annotation.Resource;
 
@@ -16,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.RedisZSetCommands.Aggregate;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
@@ -42,6 +45,57 @@ class RedisSortedSetTest {
   // - Add ZRANDMEMBER command (#8297)
   // - Add the REV, BYLEX and BYSCORE arguments to ZRANGE, and the ZRANGESTORE
   // command
+  
+  @Test
+  void testSimpleExample() {
+    //    redis> ZADD game1 100 "Frank" 740 "Jennifer" 200 "Pieter" 512 "Dave" 690 "Ana"
+    //    redis> ZADD game2 212 "Joe" 230 "Jennifer" 450 "Mary" 730 "Tom" 512 "Dave" 200 "Frank"
+    //
+    //    redis> ZRANGE game1 0 -1
+    //    redis> ZRANGE game2 0 -1 WITHSCORES
+    //
+    //    redis> ZINTER 2 game1 game2 WITHSCORES
+    //    redis> ZINTER 2 game1 game2 WITHSCORES AGGREGATE max
+    //
+    //    redis> ZDIFF 2 game1 game2 WITHSCORES
+    //    redis> ZDIFFSTORE only_game_1 2 game1 game2
+    //    redis> ZRANGE only_game_1 0 -1 WITHSCORES
+    
+    Set<TypedTuple<String>> game1 = Set.of( //
+        TypedTuple.of("Frank", 100.0), TypedTuple.of("Jennifer", 740.0), 
+        TypedTuple.of("Pieter", 200.0), TypedTuple.of("Dave", 512.0), 
+        TypedTuple.of("Ana", 690.0));
+
+    Set<TypedTuple<String>> game2 = Set.of( //
+        TypedTuple.of("Joe", 212.0), TypedTuple.of("Jennifer", 230.0), 
+        TypedTuple.of("Mary", 450.0), TypedTuple.of("Tom", 730.0), 
+        TypedTuple.of("Dave", 512.0), TypedTuple.of("Frank", 200.0));  
+    
+    zSetOps.add("game1", game1);
+    zSetOps.add("game2", game2);
+    
+    Set<String> game1Players = zSetOps.range("game1", 0, -1);
+    assertArrayEquals(new String[] { "Frank", "Pieter", "Dave", "Ana", "Jennifer"}, game1Players.toArray());
+    
+    Set<TypedTuple<String>> game2PlayersWithScores = zSetOps.rangeWithScores("game2", 0, -1);
+    TypedTuple<String> frankInGame2 = game2PlayersWithScores.iterator().next();
+    assertEquals("Frank", frankInGame2.getValue());
+    assertEquals(200.0, frankInGame2.getScore());
+    
+    Set<TypedTuple<String>> inBothGames = zSetOps.intersectWithScores("game1", "game2");
+    TypedTuple<String> frankInBothGamesTotal = inBothGames.iterator().next();
+    assertEquals("Frank", frankInBothGamesTotal.getValue());
+    assertEquals(300.0, frankInBothGamesTotal.getScore());
+    
+    Set<TypedTuple<String>> inBothGamesWithMax = zSetOps.intersectWithScores("game1", Set.of("game2"), Aggregate.MAX);
+    TypedTuple<String> frankInBothGamesMax = inBothGamesWithMax.iterator().next();
+    assertEquals("Frank", frankInBothGamesMax.getValue());
+    assertEquals(200.0, frankInBothGamesMax.getScore());
+    
+    Set<TypedTuple<String>> onlyInGame1 = zSetOps.differenceWithScores("game1", "game2");
+    List<String> players = onlyInGame1.stream().map(t -> t.getValue()).collect(Collectors.toList());
+    assertTrue(players.containsAll(Set.of("Pieter", "Ana")));
+  }
 
   @Test
   void testZMSCORE() {
